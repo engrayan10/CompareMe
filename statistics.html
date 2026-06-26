@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Station Drift — Statistics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+  // ===== CONFIGURE THIS =====
+  // Same project as the other pages — paste the same values here.
+  window.SUPABASE_URL = 'https://htaildzxkurrxsxdhtku.supabase.co';
+  window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh0YWlsZHp4a3VycnhzeGRodGt1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0MTI3NjgsImV4cCI6MjA5Nzk4ODc2OH0.cxhRyA-yy8L-KJJguStjBQ5qVaAow_23FJj4EMfyTq8';
+</script>
+<style>
+
+@font-face { font-family: 'system-mono'; src: local('IBM Plex Mono'); }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root{
+  --bg:           #F7F8FA;
+  --panel:        #FFFFFF;
+  --panel-raised: #F0F2F5;
+  --line:         #D8DCE2;
+  --line-soft:    #E6E9ED;
+  --text:         #1A2027;
+  --text-dim:     #5B6573;
+  --text-faint:   #8B95A3;
+  --accent:       #2C7BE5;
+  --accent-dim:   #BFD9F7;
+  --warn:         #B8730C;
+  --warn-dim:     #F4DDB8;
+  --crit:         #D5363C;
+  --crit-dim:     #F5C9CB;
+  --ok:           #1E9A63;
+  --radius:       3px;
+  --mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+  --sans: 'Inter', -apple-system, system-ui, sans-serif;
+}
+
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--sans);
+  min-height:100vh;
+  line-height:1.5;
+}
+
+.shell{ max-width:1180px; margin:0 auto; padding:0 28px 80px; }
+
+.topbar{
+  display:flex; align-items:baseline; justify-content:space-between;
+  padding:32px 0 24px; border-bottom:1px solid var(--line);
+  margin-bottom:36px;
+}
+.topbar .mark{ display:flex; align-items:baseline; gap:12px; }
+.topbar .mark .dot{
+  width:9px; height:9px; border-radius:50%; background:var(--accent);
+  display:inline-block; box-shadow:0 0 0 3px var(--accent-dim);
+  position:relative; top:-1px;
+}
+.topbar h1{
+  font-size:17px; font-weight:600; letter-spacing:.01em; margin:0;
+  font-family:var(--mono);
+}
+.topbar .sub{ font-size:12px; color:var(--text-faint); font-family:var(--mono); }
+.topbar-right{ display:flex; align-items:center; }
+.topbar .status{
+  font-family:var(--mono); font-size:11px; color:var(--text-faint);
+  text-transform:uppercase; letter-spacing:.08em;
+}
+.topbar .signout{
+  font-family:var(--mono); font-size:11px; color:var(--text-faint); cursor:pointer;
+  border:1px solid var(--line); padding:4px 10px; border-radius:2px; margin-left:14px;
+}
+.topbar .signout:hover{ color:var(--text); border-color:var(--text-faint); }
+
+.section-label{
+  font-family:var(--mono); font-size:11px; text-transform:uppercase;
+  letter-spacing:.12em; color:var(--text-faint); margin:0 0 14px;
+  display:flex; align-items:center; gap:10px;
+}
+.section-label .n{ color:var(--accent); }
+.section-label::after{ content:''; flex:1; height:1px; background:var(--line); }
+
+.dept-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; margin-bottom:14px; }
+.dept-slot{
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+  padding:18px; text-align:center; cursor:pointer; transition:border-color .15s ease, background .15s ease;
+  box-shadow:0 1px 2px rgba(20,30,45,0.04);
+}
+.dept-slot:hover{ border-color:var(--accent-dim); }
+.dept-slot.filled{ border-color:var(--ok); }
+.dept-slot input{ display:none; }
+.dept-slot .code{
+  font-family:var(--mono); font-size:13px; font-weight:600; color:var(--accent);
+  letter-spacing:.04em; margin-bottom:8px;
+}
+.dept-slot .icon{
+  width:34px; height:34px; margin:0 auto 8px; border-radius:3px;
+  background:var(--panel-raised); border:1px solid var(--line);
+  display:flex; align-items:center; justify-content:center; color:var(--text-faint); font-size:14px;
+}
+.dept-slot.filled .icon{ background:#E5F5EC; border-color:var(--ok); color:var(--ok); }
+.dept-slot .fname{ font-size:11.5px; color:var(--text-dim); word-break:break-all; }
+.dept-slot .fmeta{ font-family:var(--mono); font-size:10.5px; color:var(--text-faint); margin-top:3px; }
+.dept-slot .hint{ font-size:11px; color:var(--text-faint); }
+.dept-slot .remove{
+  display:inline-block; margin-top:8px; font-family:var(--mono); font-size:10.5px; color:var(--crit);
+  border:1px solid var(--crit-dim); padding:2px 7px; border-radius:2px; cursor:pointer;
+}
+.dept-slot .remove:hover{ background:var(--crit-dim); }
+
+.run-row{ display:flex; align-items:center; gap:14px; margin:26px 0 48px; }
+.btn{
+  font-family:var(--mono); font-size:12px; letter-spacing:.06em; text-transform:uppercase;
+  font-weight:600; padding:11px 22px; border-radius:var(--radius);
+  border:1px solid var(--accent); background:var(--accent); color:#0B1016;
+  cursor:pointer; transition:opacity .15s ease, transform .05s ease;
+}
+.btn:hover:not(:disabled){ opacity:.88; }
+.btn:active:not(:disabled){ transform:translateY(1px); }
+.btn:disabled{ background:transparent; border-color:var(--line); color:var(--text-faint); cursor:not-allowed; }
+.btn.ghost{ background:transparent; border-color:var(--line); color:var(--text-dim); }
+.btn.ghost:hover:not(:disabled){ border-color:var(--text-faint); opacity:1; color:var(--text); }
+.run-msg{ font-family:var(--mono); font-size:11.5px; color:var(--text-faint); }
+.run-msg.err{ color:var(--crit); }
+
+.results{ display:none; }
+.results.show{ display:block; }
+.resblock-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.resblock-head h2{ font-size:14px; font-weight:600; margin:0; }
+.resblock-head .count{ font-family:var(--mono); font-size:11px; color:var(--text-faint); }
+.desc{ font-size:12px; color:var(--text-faint); margin:0 0 14px; max-width:680px; }
+
+.table-wrap{ overflow-x:auto; margin-bottom:40px; }
+table.dtable{ width:100%; border-collapse:collapse; font-size:13px; }
+table.dtable thead th{
+  text-align:left; font-family:var(--mono); font-size:10.5px; text-transform:uppercase;
+  letter-spacing:.07em; color:var(--text-faint); font-weight:500;
+  padding:0 12px 9px; border-bottom:1px solid var(--line); white-space:nowrap;
+}
+table.dtable tbody td{
+  padding:11px 12px; border-bottom:1px solid var(--line-soft); vertical-align:middle;
+  font-family:var(--mono); font-size:12.5px; white-space:nowrap;
+}
+table.dtable tbody td.colname{ font-family:var(--sans); font-weight:600; white-space:normal; }
+table.dtable tbody tr:hover{ background:var(--panel-raised); }
+table.dtable tbody tr.total-row td{ font-weight:600; border-top:2px solid var(--line); }
+
+.export-row{ display:flex; gap:10px; margin-top:10px; }
+
+.footer{ margin-top:60px; padding-top:20px; border-top:1px solid var(--line); }
+.footer p{ font-family:var(--mono); font-size:11px; color:var(--text-faint); margin:0; }
+
+.gate{ position:fixed; inset:0; background:var(--bg); z-index:1000; display:flex; align-items:center; justify-content:center; }
+.gate.hidden{ display:none; }
+.gate-card{
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+  padding:36px 34px; width:340px; box-shadow:0 4px 16px rgba(20,30,45,0.08);
+}
+.gate-card .mark{ display:flex; align-items:baseline; gap:10px; margin-bottom:26px; }
+.gate-card .dot{ width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 3px var(--accent-dim); }
+.gate-card h1{ font-family:var(--mono); font-size:15px; margin:0; font-weight:600; }
+.gate-field{ margin-bottom:14px; }
+.gate-field label{
+  display:block; font-family:var(--mono); font-size:10.5px; text-transform:uppercase;
+  letter-spacing:.06em; color:var(--text-faint); margin-bottom:6px;
+}
+.gate-field input{
+  width:100%; background:var(--panel-raised); border:1px solid var(--line); color:var(--text);
+  font-family:var(--sans); font-size:13px; padding:9px 10px; border-radius:2px;
+}
+.gate-field input:focus{ border-color:var(--accent); }
+.gate-msg{ font-family:var(--mono); font-size:11.5px; color:var(--crit); min-height:16px; margin-bottom:10px; }
+.gate-btn{ width:100%; margin-top:6px; }
+
+.app-shell{ display:none; }
+.app-shell.show{ display:block; }
+
+::-webkit-scrollbar{ width:10px; height:10px; }
+::-webkit-scrollbar-track{ background:var(--bg); }
+::-webkit-scrollbar-thumb{ background:var(--line); border-radius:5px; }
+:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+@media (prefers-reduced-motion: reduce){ *{ transition:none !important; animation:none !important; } }
+
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <div class="mark">
+      <span class="dot"></span>
+      <h1>STATION DRIFT</h1>
+    </div>
+    <div class="gate-field">
+      <label>PRN</label>
+      <input type="text" id="gateEmail" autocomplete="username" inputmode="numeric" placeholder="e.g. 104913">
+    </div>
+    <div class="gate-field">
+      <label>Password</label>
+      <input type="password" id="gatePassword" autocomplete="current-password">
+    </div>
+    <div class="gate-msg" id="gateMsg"></div>
+    <button class="btn gate-btn" id="gateBtn">Sign in</button>
+  </div>
+</div>
+
+<div class="app-shell" id="appShell">
+<div class="shell">
+
+  <div class="topbar">
+    <div class="mark">
+      <span class="dot"></span>
+      <h1>STATION DRIFT</h1>
+      <span class="sub">// statistics</span>
+    </div>
+    <div class="topbar-right">
+      <div class="status" id="topStatus"></div>
+      <a class="signout" href="index.html" style="text-decoration:none;">← Comparison console</a>
+      <a class="signout" href="multi-report.html" style="text-decoration:none;">Multi-week report</a>
+      <span class="signout" id="signOutBtn">Sign out</span>
+    </div>
+  </div>
+
+  <div class="section-label"><span class="n">01</span>&nbsp; UPLOAD ALARM FILES (ONE PER DEPARTMENT)</div>
+  <p class="desc">Upload each department's alarm export, named for its department. Stations are excluded if their Variable_name contains "spare", or if الاتصال % is 0 — either condition is enough to exclude.</p>
+
+  <div class="dept-grid" id="deptGrid"></div>
+
+  <div class="run-row">
+    <button class="btn" id="btnRun" disabled>Generate report</button>
+    <button class="btn ghost" id="btnClear">Clear all</button>
+    <span class="run-msg" id="runMsg"></span>
+  </div>
+
+  <div class="results" id="results">
+    <div class="section-label"><span class="n">02</span>&nbsp; ALARM TOTALS</div>
+    <div class="resblock-head">
+      <div>
+        <h2>Alarm totals by department</h2>
+        <p class="desc">Counts after the spare/0% exclusion filters. TOTAL is the sum of the ten alarm-type columns to its right.</p>
+      </div>
+    </div>
+    <div class="table-wrap" id="totalsTableWrap"></div>
+
+    <div class="export-row">
+      <button class="btn ghost" id="btnExport">↓ Export full report (.xlsx)</button>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>Runs entirely in your browser. Files are never uploaded anywhere.</p>
+  </div>
+
+</div>
+</div>
+
+<script>
+(function(){
+
+  const DEPTS = ['JED','MAK','MED','TAF','TAB'];
+
+  const ALARM_COLUMNS = [
+    { key: 'LOCKED',      texts: ['LOCKED'] },
+    { key: 'LOCAL',       texts: ['LOCAL'] },
+    { key: 'DOOR OPEN',   texts: ['DOOR OPEN'] },
+    { key: 'RTU FAULTY',  texts: ['RTU FAULTY', 'RTU MALFUNCTION'] },
+    { key: 'GAS LOW',     texts: ['SF6 GAS LOW'] },
+    { key: 'DC FAIL',     texts: ['DC POWER FAILURE'] },
+    { key: 'MOTR. FAIL',  texts: ['DC MOTOR FAIL'] },
+    { key: 'BATTERY LOW', texts: ['BATTERY LOW'] },
+    { key: 'PROT. FAULTY',texts: ['PROTECTION FAIL'] },
+    { key: 'AC FAIL',     texts: ['AC FAIL', 'AC POWER SUPPLY FAILURE'] },
+  ];
+
+  const state = {
+    files: {},
+    report: null
+  };
+
+  function $(id){ return document.getElementById(id); }
+
+  const supabase = (window.SUPABASE_URL && window.SUPABASE_ANON_KEY && window.SUPABASE_URL !== 'YOUR_SUPABASE_URL_HERE')
+    ? window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY)
+    : null;
+
+  const PRN_EMAIL_DOMAIN = 'station-drift.local';
+  function prnToEmail(prn){
+    return prn.includes('@') ? prn : `${prn}@${PRN_EMAIL_DOMAIN}`;
+  }
+
+  async function initAuth(){
+    if (!supabase){
+      $('gateMsg').textContent = 'Supabase is not configured yet — edit SUPABASE_URL / SUPABASE_ANON_KEY in the page source.';
+      return;
+    }
+    const { data } = await supabase.auth.getSession();
+    if (data.session) enterApp();
+  }
+
+  async function signIn(){
+    const prn = $('gateEmail').value.trim();
+    const password = $('gatePassword').value;
+    $('gateMsg').textContent = '';
+    if (!prn || !password){
+      $('gateMsg').textContent = 'Enter your PRN and password.';
+      return;
+    }
+    const email = prnToEmail(prn);
+    $('gateBtn').disabled = true;
+    $('gateBtn').textContent = 'Signing in…';
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    $('gateBtn').disabled = false;
+    $('gateBtn').textContent = 'Sign in';
+    if (error){
+      $('gateMsg').textContent = error.message;
+      return;
+    }
+    enterApp();
+  }
+
+  function enterApp(){
+    $('gate').classList.add('hidden');
+    $('appShell').classList.add('show');
+  }
+
+  $('gateBtn').addEventListener('click', signIn);
+  $('gatePassword').addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
+  $('signOutBtn').addEventListener('click', async () => {
+    if (supabase) await supabase.auth.signOut();
+    location.reload();
+  });
+
+  initAuth();
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function readWorkbook(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try{
+          const data = new Uint8Array(e.target.result);
+          const wb = XLSX.read(data, { type:'array', cellStyles:true });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header:1, defval:'' });
+          if (!rows.length) return reject(new Error('Empty file'));
+
+          let headerRowIdx = 0;
+          for (let i = 0; i < Math.min(5, rows.length); i++){
+            const nonEmpty = rows[i].filter(c => String(c).trim() !== '');
+            if (nonEmpty.length >= 2){ headerRowIdx = i; break; }
+          }
+
+          const headers = rows[headerRowIdx].map(h => String(h).trim());
+          const bodyRows = rows.slice(headerRowIdx + 1);
+          const objects = [];
+          bodyRows.forEach((r) => {
+            if (!r.some(c => c !== '')) return;
+            const o = {};
+            headers.forEach((h,i) => {
+              if (h === '') return;
+              o[h] = r[i] !== undefined ? r[i] : '';
+            });
+            objects.push(o);
+          });
+          const cleanHeaders = headers.filter(h => h !== '');
+          if (!cleanHeaders.length) return reject(new Error('No column headers found in the first few rows'));
+          resolve({ headers: cleanHeaders, rows: objects, fileName:file.name });
+        } catch(err){ reject(err); }
+      };
+      reader.onerror = () => reject(new Error('Could not read file'));
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  function findCol(headers, candidates){
+    for (const c of candidates){
+      const hit = headers.find(h => h === c);
+      if (hit) return hit;
+    }
+    for (const c of candidates){
+      const hit = headers.find(h => h.toLowerCase() === c.toLowerCase());
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  function renderDeptGrid(){
+    const grid = $('deptGrid');
+    grid.innerHTML = DEPTS.map(code => {
+      const f = state.files[code];
+      if (f){
+        return `
+          <div class="dept-slot filled" data-code="${code}">
+            <div class="code">${code}</div>
+            <div class="icon">✓</div>
+            <div class="fname">${escapeHtml(f.fileName)}</div>
+            <div class="fmeta">${f.rows.length} rows</div>
+            <span class="remove" data-code="${code}">remove</span>
+          </div>`;
+      }
+      return `
+        <div class="dept-slot" data-code="${code}">
+          <input type="file" accept=".xlsx,.xls,.csv" data-code="${code}">
+          <div class="code">${code}</div>
+          <div class="icon">+</div>
+          <div class="hint">Click to upload ${code}.xlsx</div>
+        </div>`;
+    }).join('');
+
+    grid.querySelectorAll('.dept-slot:not(.filled)').forEach(slot => {
+      slot.addEventListener('click', () => {
+        slot.querySelector('input').click();
+      });
+    });
+    grid.querySelectorAll('input[type=file]').forEach(input => {
+      input.addEventListener('change', async (e) => {
+        const code = input.dataset.code;
+        if (!e.target.files.length) return;
+        const file = e.target.files[0];
+        try{
+          const result = await readWorkbook(file);
+          state.files[code] = result;
+          renderDeptGrid();
+          updateRunState();
+        } catch(err){
+          $('runMsg').textContent = 'Error reading ' + file.name + ': ' + err.message;
+          $('runMsg').classList.add('err');
+        }
+      });
+    });
+    grid.querySelectorAll('.remove').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        delete state.files[btn.dataset.code];
+        renderDeptGrid();
+        updateRunState();
+      });
+    });
+  }
+
+  function updateRunState(){
+    const count = Object.keys(state.files).length;
+    $('btnRun').disabled = count === 0;
+    $('runMsg').textContent = count ? `${count} department file(s) loaded.` : '';
+    $('runMsg').classList.remove('err');
+  }
+
+  $('btnClear').addEventListener('click', () => {
+    state.files = {};
+    state.report = null;
+    renderDeptGrid();
+    updateRunState();
+    $('results').classList.remove('show');
+  });
+
+  renderDeptGrid();
+
+  $('btnRun').addEventListener('click', runReport);
+
+  function runReport(){
+    const deptCodes = DEPTS.filter(code => state.files[code]);
+    if (!deptCodes.length){
+      $('runMsg').textContent = 'Upload at least one department file.';
+      $('runMsg').classList.add('err');
+      return;
+    }
+
+    const perDept = {};
+
+    deptCodes.forEach(code => {
+      const file = state.files[code];
+      const headers = file.headers;
+      const varNameCol = findCol(headers, ['Variable_name']);
+      const pctCol = findCol(headers, ['الاتصال %']);
+      const textCol = findCol(headers, ['Text']);
+
+      const filteredRows = file.rows.filter(row => {
+        const varName = String(varNameCol ? row[varNameCol] : '').toLowerCase();
+        if (varName.includes('spare')) return false;
+        const pctRaw = pctCol ? row[pctCol] : null;
+        const pct = (typeof pctRaw === 'number') ? pctRaw : parseFloat(String(pctRaw).replace('%','').trim());
+        if (!isNaN(pct) && pct === 0) return false;
+        return true;
+      });
+
+      const totals = {};
+      ALARM_COLUMNS.forEach(col => { totals[col.key] = 0; });
+      filteredRows.forEach(row => {
+        const textVal = textCol ? String(row[textCol] ?? '').trim().toUpperCase() : '';
+        ALARM_COLUMNS.forEach(col => {
+          if (col.texts.some(t => t.toUpperCase() === textVal)){
+            totals[col.key] += 1;
+          }
+        });
+      });
+      const total = ALARM_COLUMNS.reduce((sum, col) => sum + totals[col.key], 0);
+
+      perDept[code] = { filteredRows, headers, totals, total };
+    });
+
+    state.report = { deptCodes, perDept };
+    renderReport();
+    $('results').classList.add('show');
+    $('runMsg').textContent = `Generated report for ${deptCodes.length} department(s).`;
+    $('runMsg').classList.remove('err');
+    $('results').scrollIntoView({ behavior:'smooth', block:'start' });
+  }
+
+  function renderReport(){
+    const { deptCodes, perDept } = state.report;
+    const wrap = $('totalsTableWrap');
+
+    let html = '<table class="dtable"><thead><tr><th>Department</th><th>TOTAL</th>';
+    ALARM_COLUMNS.forEach(col => { html += `<th>${escapeHtml(col.key)}</th>`; });
+    html += '</tr></thead><tbody>';
+
+    deptCodes.forEach(code => {
+      const d = perDept[code];
+      html += `<tr><td class="colname">${code}</td><td>${d.total}</td>`;
+      ALARM_COLUMNS.forEach(col => { html += `<td>${d.totals[col.key]}</td>`; });
+      html += '</tr>';
+    });
+
+    if (deptCodes.length > 1){
+      const grand = { total: 0 };
+      ALARM_COLUMNS.forEach(col => { grand[col.key] = 0; });
+      deptCodes.forEach(code => {
+        const d = perDept[code];
+        grand.total += d.total;
+        ALARM_COLUMNS.forEach(col => { grand[col.key] += d.totals[col.key]; });
+      });
+      html += `<tr class="total-row"><td class="colname">ALL</td><td>${grand.total}</td>`;
+      ALARM_COLUMNS.forEach(col => { html += `<td>${grand[col.key]}</td>`; });
+      html += '</tr>';
+    }
+
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+  }
+
+  $('btnExport').addEventListener('click', () => {
+    if (!state.report) return;
+    const { deptCodes, perDept } = state.report;
+    const wb = XLSX.utils.book_new();
+
+    deptCodes.forEach(code => {
+      const d = perDept[code];
+      const ws = XLSX.utils.json_to_sheet(d.filteredRows, { header: d.headers });
+      XLSX.utils.book_append_sheet(wb, ws, code.substring(0,31));
+    });
+
+    const totalsRows = deptCodes.map(code => {
+      const d = perDept[code];
+      const row = { 'Department': code, 'TOTAL': d.total };
+      ALARM_COLUMNS.forEach(col => { row[col.key] = d.totals[col.key]; });
+      return row;
+    });
+    const totalsWs = XLSX.utils.json_to_sheet(totalsRows);
+    XLSX.utils.book_append_sheet(wb, totalsWs, 'Totals');
+
+    XLSX.writeFile(wb, 'station-alarm-statistics.xlsx');
+  });
+
+})();
+</script>
+</body>
+</html>
