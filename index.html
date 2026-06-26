@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Station Drift — Comparison Console</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+  // ===== CONFIGURE THIS =====
+  // Paste your Supabase project URL and anon public key here.
+  // Project Settings → API in your Supabase dashboard.
+  window.SUPABASE_URL = 'https://htaildzxkurrxsxdhtku.supabase.co';
+  window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh0YWlsZHp4a3VycnhzeGRodGt1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0MTI3NjgsImV4cCI6MjA5Nzk4ODc2OH0.cxhRyA-yy8L-KJJguStjBQ5qVaAow_23FJj4EMfyTq8';
+</script>
+<style>
+
+@font-face { font-family: 'system-mono'; src: local('IBM Plex Mono'); }
+
+:root{
+  --bg:           #1B2128;
+  --panel:        #232A33;
+  --panel-raised: #2B333D;
+  --line:         #3B4552;
+  --line-soft:    #313A45;
+  --text:         #EDEFF2;
+  --text-dim:     #A7B0BC;
+  --text-faint:   #76808E;
+  --accent:       #6FB4FF;
+  --accent-dim:   #3E6690;
+  --warn:         #EFAD4E;
+  --warn-dim:     #6B5530;
+  --crit:         #EE5E62;
+  --crit-dim:     #6B3438;
+  --ok:           #4FCB8F;
+  --radius:       3px;
+  --mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+  --sans: 'Inter', -apple-system, system-ui, sans-serif;
+}
+
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--sans);
+  min-height:100vh;
+  line-height:1.5;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+/* ---------- layout shell ---------- */
+.shell{ max-width:1180px; margin:0 auto; padding:0 28px 80px; }
+
+.topbar{
+  display:flex; align-items:baseline; justify-content:space-between;
+  padding:32px 0 24px; border-bottom:1px solid var(--line);
+  margin-bottom:36px;
+}
+.topbar .mark{ display:flex; align-items:baseline; gap:12px; }
+.topbar .mark .dot{
+  width:9px; height:9px; border-radius:50%; background:var(--accent);
+  display:inline-block; box-shadow:0 0 0 3px var(--accent-dim);
+  position:relative; top:-1px;
+}
+.topbar h1{
+  font-size:17px; font-weight:600; letter-spacing:.01em; margin:0;
+  font-family:var(--mono);
+}
+.topbar .sub{ font-size:12px; color:var(--text-faint); font-family:var(--mono); }
+.topbar .status{
+  font-family:var(--mono); font-size:11px; color:var(--text-faint);
+  text-transform:uppercase; letter-spacing:.08em;
+}
+.topbar .status b{ color:var(--ok); font-weight:600; }
+
+/* ---------- section labels ---------- */
+.section-label{
+  font-family:var(--mono); font-size:11px; text-transform:uppercase;
+  letter-spacing:.12em; color:var(--text-faint); margin:0 0 14px;
+  display:flex; align-items:center; gap:10px;
+}
+.section-label .n{ color:var(--accent); }
+.section-label::after{
+  content:''; flex:1; height:1px; background:var(--line);
+}
+
+/* ---------- upload zone ---------- */
+.upload-row{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:14px; }
+@media (max-width:720px){ .upload-row{ grid-template-columns:1fr; } }
+
+.dropzone{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:22px;
+  position:relative;
+  transition:border-color .15s ease, background .15s ease;
+  cursor:pointer;
+}
+.dropzone:hover{ border-color:var(--accent-dim); }
+.dropzone.drag{ border-color:var(--accent); background:var(--panel-raised); }
+.dropzone.filled{ border-color:var(--ok); }
+.dropzone input{ display:none; }
+
+.dz-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.dz-label{
+  font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--text-dim);
+}
+.dz-label.current{ color:var(--accent); }
+.dz-label.past{ color:var(--text-dim); }
+.dz-tag{
+  font-family:var(--mono); font-size:10px; color:var(--text-faint);
+  border:1px solid var(--line); padding:2px 7px; border-radius:2px;
+}
+
+.dz-body{ display:flex; align-items:center; gap:14px; min-height:46px; }
+.dz-icon{
+  width:36px; height:36px; flex:none; border-radius:3px;
+  background:var(--panel-raised); border:1px solid var(--line);
+  display:flex; align-items:center; justify-content:center;
+  color:var(--text-faint);
+}
+.dropzone.filled .dz-icon{ background:rgba(63,185,127,0.1); border-color:var(--ok); color:var(--ok); }
+.dz-text .fname{ font-size:13px; font-weight:500; color:var(--text); word-break:break-all; }
+.dz-text .fmeta{ font-size:11px; color:var(--text-faint); font-family:var(--mono); margin-top:2px; }
+.dz-text .hint{ font-size:12px; color:var(--text-faint); }
+
+/* ---------- compare button ---------- */
+.run-row{ display:flex; align-items:center; gap:14px; margin:26px 0 48px; }
+.btn{
+  font-family:var(--mono); font-size:12px; letter-spacing:.06em; text-transform:uppercase;
+  font-weight:600; padding:11px 22px; border-radius:var(--radius);
+  border:1px solid var(--accent); background:var(--accent); color:#0B1016;
+  cursor:pointer; transition:opacity .15s ease, transform .05s ease;
+}
+.btn:hover:not(:disabled){ opacity:.88; }
+.btn:active:not(:disabled){ transform:translateY(1px); }
+.btn:disabled{
+  background:transparent; border-color:var(--line); color:var(--text-faint);
+  cursor:not-allowed;
+}
+.btn.ghost{
+  background:transparent; border-color:var(--line); color:var(--text-dim);
+}
+.btn.ghost:hover:not(:disabled){ border-color:var(--text-faint); opacity:1; color:var(--text); }
+.run-msg{ font-family:var(--mono); font-size:11.5px; color:var(--text-faint); }
+.run-msg.err{ color:var(--crit); }
+
+/* ---------- column mapping (collapsible, appears if needed) ---------- */
+.mapbox{
+  background:var(--panel); border:1px solid var(--warn-dim); border-radius:var(--radius);
+  padding:18px 20px; margin-bottom:30px; display:none;
+}
+.mapbox.show{ display:block; }
+.mapbox .mtitle{
+  font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--warn); margin-bottom:12px;
+}
+.mapgrid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+.mapfield label{
+  display:block; font-size:10.5px; color:var(--text-faint); font-family:var(--mono);
+  text-transform:uppercase; letter-spacing:.06em; margin-bottom:5px;
+}
+.mapfield select{
+  width:100%; background:var(--panel-raised); border:1px solid var(--line); color:var(--text);
+  font-family:var(--sans); font-size:12.5px; padding:7px 8px; border-radius:2px;
+}
+
+/* ---------- results ---------- */
+.results{ display:none; }
+.results.show{ display:block; }
+
+.resblock{ margin-bottom:46px; }
+.resblock-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.resblock-title{ display:flex; align-items:center; gap:10px; }
+.resblock-title .chip{
+  width:7px; height:7px; border-radius:50%;
+}
+.chip.warn{ background:var(--warn); }
+.chip.crit{ background:var(--crit); }
+.resblock h2{ font-size:14px; font-weight:600; margin:0; }
+.resblock .count{
+  font-family:var(--mono); font-size:11px; color:var(--text-faint);
+}
+.resblock .desc{ font-size:12px; color:var(--text-faint); margin:4px 0 0; max-width:560px; }
+
+.empty-state{
+  border:1px dashed var(--line); border-radius:var(--radius); padding:22px;
+  font-family:var(--mono); font-size:12px; color:var(--text-faint); text-align:center;
+}
+
+table.dtable{ width:100%; border-collapse:collapse; font-size:13px; }
+table.dtable thead th{
+  text-align:left; font-family:var(--mono); font-size:10.5px; text-transform:uppercase;
+  letter-spacing:.07em; color:var(--text-faint); font-weight:500;
+  padding:0 12px 9px; border-bottom:1px solid var(--line);
+}
+table.dtable tbody td{
+  padding:11px 12px; border-bottom:1px solid var(--line-soft);
+  vertical-align:middle;
+}
+table.dtable tbody tr:hover{ background:rgba(255,255,255,0.018); }
+table.dtable .colname{ font-weight:500; }
+table.dtable .colmeta{ color:var(--text-faint); font-size:11.5px; font-family:var(--mono); }
+
+/* instrument reading: past -> current dots */
+.reading{ display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:12px; white-space:nowrap; }
+.reading .val{ min-width:46px; text-align:right; }
+.reading .val.past{ color:var(--text-faint); }
+.reading .val.current{ font-weight:600; }
+.reading .val.current.warn{ color:var(--warn); }
+.reading .val.current.crit{ color:var(--crit); }
+.reading svg{ flex:none; }
+
+.loc-pill{
+  font-family:var(--mono); font-size:11px; padding:3px 8px; border-radius:2px;
+  border:1px solid var(--line); color:var(--text-dim); white-space:nowrap;
+}
+.loc-pill.matched{ border-color:var(--ok); color:var(--ok); background:rgba(63,185,127,0.07); }
+.loc-pill.unmatched{ border-color:var(--line); color:var(--text-faint); }
+
+/* ---------- location upload ---------- */
+.locsection{ margin-top:54px; padding-top:34px; border-top:1px solid var(--line); }
+.locsection.disabled{ opacity:.4; pointer-events:none; }
+.loc-grid{ display:grid; grid-template-columns:340px 1fr; gap:24px; align-items:start; }
+@media (max-width:780px){ .loc-grid{ grid-template-columns:1fr; } }
+.loc-note{ font-size:12.5px; color:var(--text-faint); margin-top:14px; line-height:1.6; }
+.loc-note code{ font-family:var(--mono); background:var(--panel-raised); padding:1px 5px; border-radius:2px; font-size:11.5px; }
+
+.loc-summary{ display:flex; gap:18px; margin-top:18px; flex-wrap:wrap; }
+.loc-stat{ font-family:var(--mono); }
+.loc-stat .num{ font-size:22px; font-weight:600; display:block; }
+.loc-stat .lbl{ font-size:10.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.06em; }
+.loc-stat.matched .num{ color:var(--ok); }
+.loc-stat.unmatched .num{ color:var(--text-faint); }
+
+/* ---------- export ---------- */
+.export-row{ display:flex; gap:10px; margin-top:22px; }
+
+/* ---------- footer ---------- */
+.footer{ margin-top:60px; padding-top:20px; border-top:1px solid var(--line); }
+.footer p{ font-family:var(--mono); font-size:11px; color:var(--text-faint); margin:0; }
+
+/* scrollbar */
+::-webkit-scrollbar{ width:10px; height:10px; }
+::-webkit-scrollbar-track{ background:var(--bg); }
+::-webkit-scrollbar-thumb{ background:var(--line); border-radius:5px; }
+
+:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+
+@media (prefers-reduced-motion: reduce){
+  *{ transition:none !important; animation:none !important; }
+}
+
+.table-wrap{ overflow-x:auto; }
+
+/* ---------- login gate ---------- */
+.gate{
+  position:fixed; inset:0; background:var(--bg); z-index:1000;
+  display:flex; align-items:center; justify-content:center;
+}
+.gate.hidden{ display:none; }
+.gate-card{
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+  padding:36px 34px; width:340px;
+}
+.gate-card .mark{ display:flex; align-items:baseline; gap:10px; margin-bottom:26px; }
+.gate-card .dot{
+  width:8px; height:8px; border-radius:50%; background:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-dim);
+}
+.gate-card h1{ font-family:var(--mono); font-size:15px; margin:0; font-weight:600; }
+.gate-field{ margin-bottom:14px; }
+.gate-field label{
+  display:block; font-family:var(--mono); font-size:10.5px; text-transform:uppercase;
+  letter-spacing:.06em; color:var(--text-faint); margin-bottom:6px;
+}
+.gate-field input{
+  width:100%; background:var(--panel-raised); border:1px solid var(--line); color:var(--text);
+  font-family:var(--sans); font-size:13px; padding:9px 10px; border-radius:2px;
+}
+.gate-field input:focus{ border-color:var(--accent); }
+.gate-msg{ font-family:var(--mono); font-size:11.5px; color:var(--crit); min-height:16px; margin-bottom:10px; }
+.gate-btn{ width:100%; margin-top:6px; }
+
+.app-shell{ display:none; }
+.app-shell.show{ display:block; }
+
+.topbar .signout{
+  font-family:var(--mono); font-size:11px; color:var(--text-faint); cursor:pointer;
+  border:1px solid var(--line); padding:4px 10px; border-radius:2px; margin-left:14px;
+}
+.topbar .signout:hover{ color:var(--text); border-color:var(--text-faint); }
+.topbar-right{ display:flex; align-items:center; }
+
+/* ---------- DB location status ---------- */
+.db-status{
+  display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:11.5px;
+  color:var(--text-faint); padding:9px 12px; background:var(--panel); border:1px solid var(--line);
+  border-radius:var(--radius); margin-bottom:16px;
+}
+.db-status .dbdot{ width:6px; height:6px; border-radius:50%; background:var(--text-faint); flex:none; }
+.db-status.connected .dbdot{ background:var(--ok); }
+.db-status.connected{ color:var(--text-dim); }
+.db-status .dbcount{ color:var(--accent); font-weight:600; }
+
+.csv-upload-row{ display:flex; align-items:center; gap:12px; margin-top:14px; flex-wrap:wrap; }
+.csv-upload-row input[type=file]{ display:none; }
+.csv-status{ font-family:var(--mono); font-size:11.5px; color:var(--text-faint); }
+.csv-status.err{ color:var(--crit); }
+.csv-status.ok{ color:var(--ok); }
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <div class="mark">
+      <span class="dot"></span>
+      <h1>STATION DRIFT</h1>
+    </div>
+    <div class="gate-field">
+      <label>Email</label>
+      <input type="email" id="gateEmail" autocomplete="username">
+    </div>
+    <div class="gate-field">
+      <label>Password</label>
+      <input type="password" id="gatePassword" autocomplete="current-password">
+    </div>
+    <div class="gate-msg" id="gateMsg"></div>
+    <button class="btn gate-btn" id="gateBtn">Sign in</button>
+  </div>
+</div>
+
+<div class="app-shell" id="appShell">
+<div class="shell">
+
+  <div class="topbar">
+    <div class="mark">
+      <span class="dot"></span>
+      <h1>STATION DRIFT</h1>
+      <span class="sub">// comparison console</span>
+    </div>
+    <div class="topbar-right">
+      <div class="status" id="topStatus">awaiting input</div>
+      <span class="signout" id="signOutBtn">Sign out</span>
+    </div>
+  </div>
+
+  <!-- STEP 1: upload current/past -->
+  <div class="section-label"><span class="n">01</span>&nbsp; LOAD READINGS</div>
+
+  <div class="upload-row">
+    <div class="dropzone" id="dz-current">
+      <input type="file" id="file-current" accept=".xlsx,.xls,.csv">
+      <div class="dz-head">
+        <span class="dz-label current">Current</span>
+        <span class="dz-tag">.xlsx / .xls / .csv</span>
+      </div>
+      <div class="dz-body">
+        <div class="dz-icon">▣</div>
+        <div class="dz-text">
+          <div class="fname" id="fname-current">Drop or click to upload</div>
+          <div class="hint" id="fhint-current">This period's measurements</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dropzone" id="dz-past">
+      <input type="file" id="file-past" accept=".xlsx,.xls,.csv">
+      <div class="dz-head">
+        <span class="dz-label past">Past</span>
+        <span class="dz-tag">.xlsx / .xls / .csv</span>
+      </div>
+      <div class="dz-body">
+        <div class="dz-icon">▣</div>
+        <div class="dz-text">
+          <div class="fname" id="fname-past">Drop or click to upload</div>
+          <div class="hint" id="fhint-past">Prior period's measurements</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mapbox" id="mapbox">
+    <div class="mtitle">⚠ Confirm column mapping — couldn't auto-detect with full confidence</div>
+    <div class="mapgrid">
+      <div class="mapfield">
+        <label>Station name column</label>
+        <select id="map-name"></select>
+      </div>
+      <div class="mapfield">
+        <label>Percentage column</label>
+        <select id="map-pct"></select>
+      </div>
+    </div>
+  </div>
+
+  <div class="run-row">
+    <button class="btn" id="btnCompare" disabled>Compare</button>
+    <span class="run-msg" id="runMsg"></span>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="results" id="results">
+
+    <div class="section-label"><span class="n">02</span>&nbsp; RESULTS</div>
+
+    <div class="resblock">
+      <div class="resblock-head">
+        <div class="resblock-title">
+          <span class="chip warn"></span>
+          <h2>Decreasing</h2>
+        </div>
+        <span class="count" id="countDecreasing">0 stations</span>
+      </div>
+      <p class="desc">Stations whose percentage dropped from the past file to the current file. Increases and unchanged values are excluded.</p>
+      <div class="table-wrap" id="tableDecreasingWrap"></div>
+    </div>
+
+    <div class="resblock">
+      <div class="resblock-head">
+        <div class="resblock-title">
+          <span class="chip crit"></span>
+          <h2>Critical — ≤ 1.0%</h2>
+        </div>
+        <span class="count" id="countCritical">0 stations</span>
+      </div>
+      <p class="desc">Stations at zero or below 1.0% in the current file, regardless of trend.</p>
+      <div class="table-wrap" id="tableCriticalWrap"></div>
+    </div>
+
+    <div class="export-row">
+      <button class="btn ghost" id="btnExport">↓ Export results (.xlsx)</button>
+    </div>
+
+    <!-- STEP 3: location -->
+    <div class="locsection" id="locsection">
+      <div class="section-label"><span class="n">03</span>&nbsp; ASSIGN LOCATIONS</div>
+
+      <div class="db-status" id="dbStatus">
+        <span class="dbdot"></span>
+        <span id="dbStatusText">Connecting to location database…</span>
+      </div>
+
+      <div class="csv-upload-row">
+        <button class="btn ghost" id="csvUploadBtn">↑ Upload locations CSV (adds / updates database)</button>
+        <input type="file" id="file-csv-loc" accept=".csv,.xlsx,.xls">
+        <span class="csv-status" id="csvStatus"></span>
+      </div>
+
+      <p class="loc-note" style="margin-top:10px;">
+        CSV columns: <code>station_name, ip, station_type, location</code>. Matching existing rows (by name + IP + type) get their location updated; new combinations get added.
+      </p>
+
+      <div class="loc-summary" id="locSummary" style="display:none;margin-top:18px;">
+        <div class="loc-stat matched"><span class="num" id="locMatchedCount">0</span><span class="lbl">Matched</span></div>
+        <div class="loc-stat unmatched"><span class="num" id="locUnmatchedCount">0</span><span class="lbl">Unmatched</span></div>
+      </div>
+
+      <details style="margin-top:30px;">
+        <summary style="cursor:pointer; font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-faint);">
+          One-off location file (skip the database, use just for this session)
+        </summary>
+        <div class="loc-grid" style="margin-top:16px;">
+          <div class="dropzone" id="dz-loc">
+            <input type="file" id="file-loc" accept=".xlsx,.xls,.csv">
+            <div class="dz-head">
+              <span class="dz-label past">Station locations</span>
+              <span class="dz-tag">.xlsx / .xls / .csv</span>
+            </div>
+            <div class="dz-body">
+              <div class="dz-icon">⟟</div>
+              <div class="dz-text">
+                <div class="fname" id="fname-loc">Drop or click to upload</div>
+                <div class="hint" id="fhint-loc">Name + IP + Type + Location columns</div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <p class="loc-note">
+              Matches against the rows above using <strong>name + IP + type</strong> — all three fields must agree before a location is assigned. This overrides database matches for this session only; nothing here gets saved.
+            </p>
+            <div class="mapbox" id="locMapbox" style="margin-top:14px;">
+              <div class="mtitle">⚠ Confirm location column mapping</div>
+              <div class="mapgrid" id="locMapGrid"></div>
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <p>Runs entirely in your browser. Files are never uploaded anywhere except locations, which sync to your private Supabase database.</p>
+  </div>
+
+</div>
+</div>
+
+<script>
+(function(){
+
+  const state = {
+    current: null,   // {rows, headers, fileName}
+    past: null,
+    location: null,
+    nameColCurrent: null, pctColCurrent: null,
+    nameColPast: null, pctColPast: null,
+    decreasing: [],
+    critical: [],
+    locMap: { name:null, ip:null, type:null, location:null },
+    dbLocations: new Map() // key: "name|ip|type" -> location string
+  };
+
+  // ---------- Supabase client ----------
+  const supabase = (window.SUPABASE_URL && window.SUPABASE_ANON_KEY && window.SUPABASE_URL !== 'YOUR_SUPABASE_URL_HERE')
+    ? window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY)
+    : null;
+
+  // ---------- Auth gate ----------
+  async function initAuth(){
+    if (!supabase){
+      $('gateMsg').textContent = 'Supabase is not configured yet — edit SUPABASE_URL / SUPABASE_ANON_KEY in the page source.';
+      return;
+    }
+    const { data } = await supabase.auth.getSession();
+    if (data.session){
+      enterApp();
+    }
+  }
+
+  async function signIn(){
+    const email = $('gateEmail').value.trim();
+    const password = $('gatePassword').value;
+    $('gateMsg').textContent = '';
+    if (!email || !password){
+      $('gateMsg').textContent = 'Enter email and password.';
+      return;
+    }
+    $('gateBtn').disabled = true;
+    $('gateBtn').textContent = 'Signing in…';
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    $('gateBtn').disabled = false;
+    $('gateBtn').textContent = 'Sign in';
+    if (error){
+      $('gateMsg').textContent = error.message;
+      return;
+    }
+    enterApp();
+  }
+
+  function enterApp(){
+    $('gate').classList.add('hidden');
+    $('appShell').classList.add('show');
+    loadLocationsFromDb();
+  }
+
+  $('gateBtn').addEventListener('click', signIn);
+  $('gatePassword').addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
+
+  $('signOutBtn').addEventListener('click', async () => {
+    if (supabase) await supabase.auth.signOut();
+    location.reload();
+  });
+
+  initAuth();
+
+  // ---------- Locations: load from Supabase ----------
+  async function loadLocationsFromDb(){
+    if (!supabase) return;
+    $('dbStatus').classList.remove('connected');
+    $('dbStatusText').textContent = 'Loading locations…';
+    const { data, error } = await supabase.from('locations').select('station_name, ip, station_type, location');
+    if (error){
+      $('dbStatusText').textContent = 'Could not load locations: ' + error.message;
+      return;
+    }
+    state.dbLocations.clear();
+    (data || []).forEach(r => {
+      const key = [normalize(r.station_name), normalize(r.ip), normalize(r.station_type)].join('|');
+      state.dbLocations.set(key, r.location);
+    });
+    $('dbStatus').classList.add('connected');
+    $('dbStatusText').innerHTML = `<span class="dbcount">${state.dbLocations.size}</span> locations loaded from database`;
+    // if results already rendered, re-run matching against fresh DB data
+    if (state.decreasing.length || state.critical.length){
+      matchLocationsFromDb();
+    }
+  }
+
+  // ---------- Locations: CSV bulk upsert ----------
+  $('csvUploadBtn').addEventListener('click', () => $('file-csv-loc').click());
+  $('file-csv-loc').addEventListener('change', async (e) => {
+    if (!e.target.files.length) return;
+    const file = e.target.files[0];
+    $('csvStatus').textContent = 'Reading file…';
+    $('csvStatus').className = 'csv-status';
+    try{
+      const result = await readWorkbook(file);
+      const headers = result.headers.map(h => h.toLowerCase().trim());
+      const required = ['station_name','ip','station_type','location'];
+      const missing = required.filter(r => !headers.includes(r));
+      if (missing.length){
+        $('csvStatus').textContent = 'Missing column(s): ' + missing.join(', ') + '. Expected: station_name, ip, station_type, location.';
+        $('csvStatus').className = 'csv-status err';
+        return;
+      }
+      const colMap = {};
+      required.forEach(r => { colMap[r] = result.headers[headers.indexOf(r)]; });
+
+      const records = result.rows.map(row => ({
+        station_name: String(row[colMap.station_name] ?? '').trim(),
+        ip: String(row[colMap.ip] ?? '').trim(),
+        station_type: String(row[colMap.station_type] ?? '').trim(),
+        location: String(row[colMap.location] ?? '').trim()
+      })).filter(r => r.station_name && r.ip && r.station_type);
+
+      if (!records.length){
+        $('csvStatus').textContent = 'No valid rows found in file.';
+        $('csvStatus').className = 'csv-status err';
+        return;
+      }
+
+      $('csvStatus').textContent = `Uploading ${records.length} rows…`;
+      const { error } = await supabase.from('locations')
+        .upsert(records, { onConflict: 'station_name,ip,station_type' });
+
+      if (error){
+        $('csvStatus').textContent = 'Upload failed: ' + error.message;
+        $('csvStatus').className = 'csv-status err';
+        return;
+      }
+      $('csvStatus').textContent = `✓ ${records.length} rows added/updated.`;
+      $('csvStatus').className = 'csv-status ok';
+      loadLocationsFromDb();
+    } catch(err){
+      $('csvStatus').textContent = 'Error: ' + err.message;
+      $('csvStatus').className = 'csv-status err';
+    }
+    e.target.value = '';
+  });
+
+  // ---------- helpers ----------
+  function $(id){ return document.getElementById(id); }
+
+  function normalize(s){
+    return String(s ?? '').trim().toLowerCase();
+  }
+
+  // Values are read as-is (e.g. a cell holding 0.5 is treated as 0.5%, not 50%).
+  // The one exception: if the cell is formatted as an Excel "Percentage" type,
+  // SheetJS gives us the raw fraction (0.005 for 0.5%), so we scale only that case.
+  function parsePercent(v, cell){
+    if (v === null || v === undefined || v === '') return null;
+    if (typeof v === 'number') {
+      const isPercentFormatted = cell && cell.z && /%/.test(cell.z);
+      return isPercentFormatted ? v * 100 : v;
+    }
+    const s = String(v).replace('%','').trim();
+    const n = parseFloat(s);
+    if (isNaN(n)) return null;
+    return n;
+  }
+
+  function readWorkbook(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try{
+          const data = new Uint8Array(e.target.result);
+          const wb = XLSX.read(data, { type:'array', cellStyles:true });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header:1, defval:'' });
+          if (!rows.length) return reject(new Error('Empty file'));
+
+          // Find the real header row: scan the first few rows and pick the first one
+          // that has at least 2 distinct, non-empty cells (guards against a merged
+          // title row or blank spacer row sitting above the actual headers).
+          let headerRowIdx = 0;
+          for (let i = 0; i < Math.min(5, rows.length); i++){
+            const nonEmpty = rows[i].filter(c => String(c).trim() !== '');
+            if (nonEmpty.length >= 2){ headerRowIdx = i; break; }
+          }
+
+          const headers = rows[headerRowIdx].map(h => String(h).trim());
+          const bodyRows = rows.slice(headerRowIdx + 1);
+          const objects = [];
+          bodyRows.forEach((r, rIdx) => {
+            if (!r.some(c => c !== '')) return;
+            const o = {};
+            const cellMeta = {};
+            headers.forEach((h,i) => {
+              if (h === '') return; // skip unlabeled columns entirely
+              o[h] = r[i] !== undefined ? r[i] : '';
+              const addr = XLSX.utils.encode_cell({ r: rIdx + headerRowIdx + 1, c: i });
+              cellMeta[h] = sheet[addr] || null;
+            });
+            o.__cells = cellMeta;
+            objects.push(o);
+          });
+          const cleanHeaders = headers.filter(h => h !== '');
+          if (!cleanHeaders.length) return reject(new Error('No column headers found in the first few rows'));
+          resolve({ headers: cleanHeaders, rows: objects, fileName:file.name });
+        } catch(err){ reject(err); }
+      };
+      reader.onerror = () => reject(new Error('Could not read file'));
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  function guessColumn(headers, kind){
+    const patterns = {
+      name: [/^station$/i, /station.?name/i, /^name$/i, /site/i, /^id$/i],
+      pct:  [/percent/i, /^pct$/i, /%/, /uptime/i, /availab/i, /rate/i],
+      ip:   [/^ip$/i, /ip.?address/i],
+      type: [/^type$/i, /station.?type/i, /category/i],
+      location: [/location/i, /address/i, /lat/i, /coordinat/i, /site.?address/i]
+    };
+    for (const p of patterns[kind]){
+      const hit = headers.find(h => p.test(h));
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  function setFileDisplay(prefix, fileName, metaText){
+    $('fname-' + prefix).textContent = fileName;
+    $('fhint-' + prefix).textContent = metaText;
+    $('dz-' + prefix).classList.add('filled');
+  }
+
+  function setStatus(){
+    const parts = [];
+    parts.push(state.current ? 'current ✓' : 'current —');
+    parts.push(state.past ? 'past ✓' : 'past —');
+    $('topStatus').innerHTML = parts.join('&nbsp;&nbsp;·&nbsp;&nbsp;');
+  }
+
+  // ---------- file wiring: current / past ----------
+  function wireDropzone(prefix, onLoaded){
+    const dz = $('dz-' + prefix);
+    const input = $('file-' + prefix);
+    dz.addEventListener('click', () => input.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault(); dz.classList.remove('drag');
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    input.addEventListener('change', e => {
+      if (e.target.files.length) handleFile(e.target.files[0]);
+    });
+    function handleFile(file){
+      readWorkbook(file).then(result => {
+        setFileDisplay(prefix, file.name, result.rows.length + ' rows · ' + result.headers.length + ' columns');
+        onLoaded(result);
+      }).catch(err => {
+        $('runMsg').textContent = 'Error reading ' + file.name + ': ' + err.message;
+        $('runMsg').classList.add('err');
+      });
+    }
+  }
+
+  wireDropzone('current', (result) => {
+    state.current = result;
+    state.nameColCurrent = guessColumn(result.headers, 'name');
+    state.pctColCurrent = guessColumn(result.headers, 'pct');
+    afterBothMaybeLoaded();
+  });
+
+  wireDropzone('past', (result) => {
+    state.past = result;
+    state.nameColPast = guessColumn(result.headers, 'name');
+    state.pctColPast = guessColumn(result.headers, 'pct');
+    afterBothMaybeLoaded();
+  });
+
+  function afterBothMaybeLoaded(){
+    setStatus();
+    const ready = state.current && state.past;
+    const needsMapping = ready && (!state.nameColCurrent || !state.pctColCurrent || !state.nameColPast || !state.pctColPast);
+    if (needsMapping){
+      showMappingUI();
+    } else {
+      $('mapbox').classList.remove('show');
+    }
+    $('btnCompare').disabled = !ready;
+    $('runMsg').textContent = ready ? 'Ready to compare.' : '';
+    $('runMsg').classList.remove('err');
+  }
+
+  function showMappingUI(){
+    // Use current file's headers as the basis (assumes both files share structure;
+    // if past file differs we still default-guess separately under the hood)
+    const headers = state.current.headers.filter(h => h !== '');
+    if (!headers.length){
+      $('runMsg').textContent = 'No column headers detected in the Current file — check that row 1 contains column names.';
+      $('runMsg').classList.add('err');
+      return;
+    }
+    const nameSel = $('map-name');
+    const pctSel = $('map-pct');
+    const optionsHtml = headers.map(h => `<option value="${escapeHtml(h)}">${escapeHtml(h)}</option>`).join('');
+    nameSel.innerHTML = optionsHtml;
+    pctSel.innerHTML = optionsHtml;
+    if (state.nameColCurrent && headers.includes(state.nameColCurrent)) nameSel.value = state.nameColCurrent;
+    if (state.pctColCurrent && headers.includes(state.pctColCurrent)) pctSel.value = state.pctColCurrent;
+    nameSel.onchange = () => { state.nameColCurrent = nameSel.value; state.nameColPast = nameSel.value; };
+    pctSel.onchange = () => { state.pctColCurrent = pctSel.value; state.pctColPast = pctSel.value; };
+    if (!state.nameColCurrent || !headers.includes(state.nameColCurrent)) state.nameColCurrent = nameSel.value || headers[0];
+    if (!state.pctColCurrent || !headers.includes(state.pctColCurrent)) state.pctColCurrent = pctSel.value || headers[1] || headers[0];
+    state.nameColPast = state.nameColCurrent;
+    state.pctColPast = state.pctColCurrent;
+    $('mapbox').classList.add('show');
+  }
+
+  // ---------- compare ----------
+  $('btnCompare').addEventListener('click', runCompare);
+
+  function runCompare(){
+    const nameKeyC = state.nameColCurrent, pctKeyC = state.pctColCurrent;
+    const nameKeyP = state.nameColPast, pctKeyP = state.pctColPast;
+
+    if (!nameKeyC || !pctKeyC || !nameKeyP || !pctKeyP){
+      $('runMsg').textContent = 'Please confirm column mapping above.';
+      $('runMsg').classList.add('err');
+      return;
+    }
+
+    const pastByName = new Map();
+    state.past.rows.forEach(r => {
+      const key = normalize(r[nameKeyP]);
+      if (key) pastByName.set(key, r);
+    });
+
+    const decreasing = [];
+    const critical = [];
+
+    state.current.rows.forEach(curRow => {
+      const rawName = curRow[nameKeyC];
+      const key = normalize(rawName);
+      if (!key) return;
+      const curPct = parsePercent(curRow[pctKeyC], curRow.__cells && curRow.__cells[pctKeyC]);
+      if (curPct === null) return;
+
+      const pastRow = pastByName.get(key);
+      const pastPct = pastRow ? parsePercent(pastRow[pctKeyP], pastRow.__cells && pastRow.__cells[pctKeyP]) : null;
+
+      const entry = {
+        name: rawName,
+        currentPct: curPct,
+        pastPct: pastPct,
+        currentRow: curRow,
+        pastRow: pastRow || null
+      };
+
+      if (pastPct !== null && curPct < pastPct){
+        decreasing.push(entry);
+      }
+      if (curPct <= 1.0){
+        critical.push(entry);
+      }
+    });
+
+    decreasing.sort((a,b) => (a.currentPct - a.pastPct) - (b.currentPct - b.pastPct));
+    critical.sort((a,b) => a.currentPct - b.currentPct);
+
+    state.decreasing = decreasing;
+    state.critical = critical;
+
+    renderResults();
+    $('results').classList.add('show');
+
+    const allPcts = state.current.rows.map(r => parsePercent(r[pctKeyC], r.__cells && r.__cells[pctKeyC])).filter(v => v !== null);
+    const suspiciouslyLow = allPcts.length && allPcts.every(v => v <= 1);
+    let msg = 'Compared ' + state.current.rows.length + ' current rows against ' + state.past.rows.length + ' past rows.';
+    if (suspiciouslyLow){
+      msg += ' ⚠ Every percentage in "Current" is ≤ 1 — if your source stores percentages as fractions (e.g. 0.95 for 95%) without Excel "%" cell formatting, these values may need ×100. Check the Current/Past columns below before trusting the Critical list.';
+    }
+    $('runMsg').textContent = msg;
+    $('runMsg').classList.toggle('err', suspiciouslyLow);
+    $('results').scrollIntoView({ behavior:'smooth', block:'start' });
+  }
+
+  function fmtPct(v){
+    return v === null || v === undefined ? '—' : v.toFixed(2) + '%';
+  }
+
+  function readingSvg(pastPct, curPct, severity){
+    const w = 70, h = 20, pad = 8;
+    const max = 100;
+    const x1 = pad, x2 = w - pad;
+    const y1 = h - (Math.min(pastPct ?? curPct,100)/max)*(h-6) - 3;
+    const y2 = h - (Math.min(curPct,100)/max)*(h-6) - 3;
+    const color = severity === 'crit' ? 'var(--crit)' : severity === 'warn' ? 'var(--warn)' : 'var(--text-faint)';
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+      <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="1.5" opacity="0.55"/>
+      <circle cx="${x1}" cy="${y1}" r="2.5" fill="var(--text-faint)"/>
+      <circle cx="${x2}" cy="${y2}" r="3" fill="${color}"/>
+    </svg>`;
+  }
+
+  function renderTable(entries, wrapId, severityFn){
+    const wrap = $(wrapId);
+    if (!entries.length){
+      wrap.innerHTML = `<div class="empty-state">No stations in this category.</div>`;
+      return;
+    }
+    let html = `<table class="dtable"><thead><tr>
+      <th>Station</th><th>Past</th><th>Current</th><th>Trend</th><th>Location</th>
+    </tr></thead><tbody>`;
+    entries.forEach(e => {
+      const sev = severityFn(e);
+      const curClass = sev === 'crit' ? 'crit' : sev === 'warn' ? 'warn' : '';
+      html += `<tr data-station="${normalize(e.name)}">
+        <td class="colname">${escapeHtml(e.name)}</td>
+        <td class="colmeta">${fmtPct(e.pastPct)}</td>
+        <td class="colmeta" style="color:${curClass ? 'var(--'+curClass+')' : 'var(--text)'};font-weight:600;">${fmtPct(e.currentPct)}</td>
+        <td>${readingSvg(e.pastPct, e.currentPct, sev)}</td>
+        <td class="loc-cell"><span class="loc-pill unmatched">no location file</span></td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function renderResults(){
+    $('countDecreasing').textContent = state.decreasing.length + ' station' + (state.decreasing.length===1?'':'s');
+    $('countCritical').textContent = state.critical.length + ' station' + (state.critical.length===1?'':'s');
+    renderTable(state.decreasing, 'tableDecreasingWrap', () => 'warn');
+    renderTable(state.critical, 'tableCriticalWrap', (e) => e.currentPct <= 0 ? 'crit' : 'crit');
+    $('locsection').classList.remove('disabled');
+    // auto-match against whichever location source is available: DB first, then one-off file
+    if (state.dbLocations.size){
+      matchLocationsFromDb();
+    } else if (state.location){
+      applyLocationMatch();
+    }
+  }
+
+  function cssEscape(s){
+    return String(s).replace(/["\\]/g, '\\$&');
+  }
+
+  function findFieldLike(row, candidatesLower){
+    const keys = Object.keys(row);
+    for (const k of keys){
+      if (candidatesLower.includes(k.toLowerCase())) return row[k];
+    }
+    return undefined;
+  }
+
+  function entryIpType(e){
+    const candidates = [e.currentRow, e.pastRow].filter(Boolean);
+    for (const row of candidates){
+      const ipVal = findFieldLike(row, ['ip','ip address','ip_address']);
+      const typeVal = findFieldLike(row, ['type','station type','station_type']);
+      if (ipVal !== undefined && typeVal !== undefined) return { ip: ipVal, type: typeVal };
+    }
+    return null;
+  }
+
+  function decorateLocations(lookupFn){
+    let matched = 0, unmatched = 0;
+    [['tableDecreasingWrap', state.decreasing], ['tableCriticalWrap', state.critical]].forEach(([wrapId, entries]) => {
+      const wrap = $(wrapId);
+      entries.forEach(e => {
+        const loc = lookupFn(e);
+        const row = wrap.querySelector(`tr[data-station="${cssEscape(normalize(e.name))}"]`);
+        if (!row) return;
+        const cell = row.querySelector('.loc-cell');
+        if (loc){
+          matched++;
+          cell.innerHTML = `<span class="loc-pill matched">${escapeHtml(String(loc))}</span>`;
+        } else {
+          unmatched++;
+          cell.innerHTML = `<span class="loc-pill unmatched">unmatched</span>`;
+        }
+      });
+    });
+    $('locSummary').style.display = 'flex';
+    $('locMatchedCount').textContent = matched;
+    $('locUnmatchedCount').textContent = unmatched;
+  }
+
+  function matchLocationsFromDb(){
+    decorateLocations(e => {
+      const it = entryIpType(e);
+      if (!it) return null;
+      const key = [normalize(e.name), normalize(it.ip), normalize(it.type)].join('|');
+      return state.dbLocations.get(key) || null;
+    });
+  }
+
+  // ---------- location upload (one-off, session-only) ----------
+  wireDropzone('loc', (result) => {
+    state.location = result;
+    state.locMap.name = guessColumn(result.headers, 'name');
+    state.locMap.ip = guessColumn(result.headers, 'ip');
+    state.locMap.type = guessColumn(result.headers, 'type');
+    state.locMap.location = guessColumn(result.headers, 'location');
+
+    const needsMap = !state.locMap.name || !state.locMap.ip || !state.locMap.type || !state.locMap.location;
+    if (needsMap){
+      showLocMapping(result.headers);
+    } else {
+      $('locMapbox').classList.remove('show');
+      applyLocationMatch();
+    }
+  });
+
+  function showLocMapping(headers){
+    const grid = $('locMapGrid');
+    const fields = [
+      ['name','Station name'], ['ip','IP address'], ['type','Station type'], ['location','Location / address']
+    ];
+    grid.innerHTML = fields.map(([key,label]) => `
+      <div class="mapfield">
+        <label>${label}</label>
+        <select id="locmap-${key}">
+          ${headers.map(h => `<option value="${h}">${h}</option>`).join('')}
+        </select>
+      </div>`).join('');
+    fields.forEach(([key]) => {
+      const sel = $('locmap-' + key);
+      if (state.locMap[key]) sel.value = state.locMap[key];
+      else state.locMap[key] = sel.value;
+      sel.onchange = () => { state.locMap[key] = sel.value; };
+    });
+    $('locMapbox').classList.add('show');
+    const btn = document.createElement('button');
+    btn.className = 'btn'; btn.style.marginTop = '14px'; btn.textContent = 'Apply mapping & match';
+    btn.onclick = () => { applyLocationMatch(); };
+    const old = $('locMapGrid').parentElement.querySelector('.btn.apply-loc');
+    if (old) old.remove();
+    btn.classList.add('apply-loc');
+    $('locMapGrid').parentElement.appendChild(btn);
+  }
+
+  function applyLocationMatch(){
+    if (!state.location) return;
+    const { name, ip, type, location } = state.locMap;
+    if (!name || !ip || !type || !location) return;
+
+    const locIndex = new Map();
+    state.location.rows.forEach(r => {
+      const key = [normalize(r[name]), normalize(r[ip]), normalize(r[type])].join('|');
+      locIndex.set(key, r[location]);
+    });
+
+    decorateLocations(e => {
+      const it = entryIpType(e);
+      if (!it) return null;
+      const key = [normalize(e.name), normalize(it.ip), normalize(it.type)].join('|');
+      return locIndex.get(key) || null;
+    });
+  }
+
+  // ---------- export ----------
+  $('btnExport').addEventListener('click', () => {
+    const wb = XLSX.utils.book_new();
+
+    function toSheetRows(entries, wrapId){
+      const wrap = $(wrapId);
+      return entries.map(e => {
+        const row = wrap.querySelector(`tr[data-station="${String(normalize(e.name)).replace(/["\\]/g,'\\$&')}"]`);
+        const locPill = row ? row.querySelector('.loc-pill') : null;
+        const loc = locPill && locPill.classList.contains('matched') ? locPill.textContent : '';
+        return {
+          'Station': e.name,
+          'Past %': e.pastPct === null ? '' : Number(e.pastPct.toFixed(2)),
+          'Current %': Number(e.currentPct.toFixed(2)),
+          'Change': e.pastPct === null ? '' : Number((e.currentPct - e.pastPct).toFixed(2)),
+          'Location': loc
+        };
+      });
+    }
+
+    const decSheet = XLSX.utils.json_to_sheet(toSheetRows(state.decreasing, 'tableDecreasingWrap'));
+    const critSheet = XLSX.utils.json_to_sheet(toSheetRows(state.critical, 'tableCriticalWrap'));
+    XLSX.utils.book_append_sheet(wb, decSheet, 'Decreasing');
+    XLSX.utils.book_append_sheet(wb, critSheet, 'Critical (<=1%)');
+    XLSX.writeFile(wb, 'station-drift-results.xlsx');
+  });
+
+})();
+</script>
+</body>
+</html>
